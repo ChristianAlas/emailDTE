@@ -1,0 +1,32 @@
+{
+    "email": "info.renes@gmail.com",
+    "password": "lkqd tnue jgft mbte",
+    "imap_server": "imap.gmail.com",
+    "imap_port": 993,
+    "base_download_path": "E:/Users/Descargas/DTE descargados",
+    "keywords": [
+        "DTE",
+        "Factura Electronica",
+        "Factura",
+        "Documento Electronico",
+        "factura",
+        "Notificacion Electronica",
+        "Factura Electrónica",
+        "Notificación Eléctronica",
+        "comprobante digital",
+        "Documento electrónico",
+        "factura",
+        "DOCUMENTO TRIBUTARIO ELECTRONICO",
+        "(DTE)",
+        "DOCUMENTO ELECTRONICO",
+        "Comprobante de Credito Fiscal",
+        "NOTIFICACION FACTURA ELECTRONICA",
+        "DOCUMENTO TRIBUTARIO ELECTRONICO",
+        "Documento Tributario"
+    ],
+    "label_name": "DTE_Processed",
+    "schedule_interval": 30,
+    "days_to_check": 30,
+    "last_run": null,
+    "max_emails_per_run": 100
+}

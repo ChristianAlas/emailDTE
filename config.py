@@ -9,8 +9,13 @@ class Config:
             "email": "tu_correo@gmail.com",
             "password": "",  # Contraseña de aplicación
             "imap_server": "imap.gmail.com",
+            "imap_use_ssl": True,
+            "provider": "Gmail",
             "imap_port": 993,
             "base_download_path": "./downloads",
+            "storage_create_year": True,
+            "storage_create_month": True,
+            "storage_create_sender": True,
             "keywords": ["DTE", "Factura Electronica", "Factura", "Boleta"],
             "label_name": "DTE_Processed",  # Nombre de la etiqueta en Gmail
             "schedule_interval": 30,  # minutos

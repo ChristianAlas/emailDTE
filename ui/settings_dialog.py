@@ -1,8 +1,6 @@
-from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
+from PySide6.QtWidgets import (QDialog, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                               QLabel, QLineEdit, QTextEdit, QFileDialog,
-                              QGroupBox, QFormLayout, QMessageBox)
-from PySide6.QtCore import Qt
-import json
+                              QFormLayout, QMessageBox, QComboBox, QCheckBox, QTabWidget)
 
 class SettingsDialog(QDialog):
     def __init__(self, config, parent=None):
@@ -15,118 +13,89 @@ class SettingsDialog(QDialog):
     
     def init_ui(self):
         layout = QVBoxLayout(self)
-        
-        # Credenciales Gmail
-        creds_group = QGroupBox("Credenciales Gmail")
-        creds_layout = QFormLayout()
-        
-        self.email_input = QLineEdit(self.config.get('email', ''))
-        self.email_input.setPlaceholderText("tu_correo@gmail.com")
-        creds_layout.addRow("Correo Gmail:", self.email_input)
-        
-        self.password_input = QLineEdit(self.config.get('password', ''))
-        self.password_input.setEchoMode(QLineEdit.Password)
-        self.password_input.setPlaceholderText("Contraseña de aplicación de 16 caracteres")
-        creds_layout.addRow("Contraseña App:", self.password_input)
-        
-        # Información sobre contraseña de aplicación
-        info_label = QLabel(
-            "ℹ️ <b>Importante:</b> Debes usar una contraseña de aplicación de Google.\n"
-            "1. Ve a myaccount.google.com/security\n"
-            "2. Activa verificación en 2 pasos\n"
-            "3. Ve a 'Contraseñas de aplicación'\n"
-            "4. Genera una contraseña para 'Correo' y 'Otra aplicación'"
-        )
-        info_label.setWordWrap(True)
-        info_label.setStyleSheet("color: #666; font-size: 11px;")
-        creds_layout.addRow("", info_label)
-        
-        creds_group.setLayout(creds_layout)
-        layout.addWidget(creds_group)
-        
-        # Paths group
-        paths_group = QGroupBox("Rutas")
-        paths_layout = QFormLayout()
-        
+
+        tabs = QTabWidget()
+
+        # Nota: la gestión de cuentas (email/contraseña/servidor) se realiza en "Administrar cuentas"
+
+        # Organización tab (cómo se crean las carpetas)
+        org_tab = QWidget()
+        org_layout = QVBoxLayout()
+
+
         self.download_path = QLineEdit(self.config.get('base_download_path', './downloads'))
         browse_btn = QPushButton("Examinar...")
         browse_btn.clicked.connect(self.browse_download_path)
-        
-        path_widget = QHBoxLayout()
-        path_widget.addWidget(self.download_path)
-        path_widget.addWidget(browse_btn)
-        paths_layout.addRow("Directorio descargas:", path_widget)
-        
-        paths_group.setLayout(paths_layout)
-        layout.addWidget(paths_group)
-        
-        # Keywords group
-        keywords_group = QGroupBox("Palabras Clave")
-        keywords_layout = QVBoxLayout()
-        
-        keywords_layout.addWidget(QLabel("Una palabra o frase por línea:"))
-        self.keywords_edit = QTextEdit()
-        keywords = self.config.get('keywords', [])
-        self.keywords_edit.setText('\n'.join(keywords))
-        self.keywords_edit.setMaximumHeight(100)
-        keywords_layout.addWidget(self.keywords_edit)
-        
-        keywords_group.setLayout(keywords_layout)
-        layout.addWidget(keywords_group)
-        
-        # Opciones adicionales
-        options_group = QGroupBox("Opciones")
-        options_layout = QFormLayout()
-        
+        org_layout.addWidget(self.download_path)
+        org_layout.addWidget(browse_btn)
+
+
+        self.create_year_cb = QCheckBox("Crear carpeta por año (YYYY)")
+        self.create_year_cb.setChecked(bool(self.config.get('storage_create_year', True)))
+        org_layout.addWidget(self.create_year_cb)
+
+        self.create_month_cb = QCheckBox("Crear carpeta por mes (MM Nombre)")
+        self.create_month_cb.setChecked(bool(self.config.get('storage_create_month', True)))
+        org_layout.addWidget(self.create_month_cb)
+
+        self.create_sender_cb = QCheckBox("Crear carpeta por remitente (email)")
+        self.create_sender_cb.setChecked(bool(self.config.get('storage_create_sender', True)))
+        org_layout.addWidget(self.create_sender_cb)
+
+        self.preview_label = QLabel("Ejemplo de ruta: ")
+        org_layout.addWidget(self.preview_label)
+
+        # Conectar para actualizar vista previa
+        self.create_year_cb.toggled.connect(self.update_preview)
+        self.create_month_cb.toggled.connect(self.update_preview)
+        self.create_sender_cb.toggled.connect(self.update_preview)
+        self.download_path.textChanged.connect(self.update_preview)
+
+        # Inicializar preview
+        self.update_preview()
+
+        org_tab.setLayout(org_layout)
+        tabs.addTab(org_tab, "Descargas")
+
+        # --- Opciones (máx correos, días, etiqueta, keywords) ---
+        options_tab = QWidget()
+        options_layout = QVBoxLayout()
+
+        form = QFormLayout()
         self.max_emails = QLineEdit(str(self.config.get('max_emails_per_run', 100)))
-        options_layout.addRow("Máx. correos por ejecución:", self.max_emails)
-        
+        form.addRow("Máx. correos por ejecución:", self.max_emails)
+
         self.days_to_check = QLineEdit(str(self.config.get('days_to_check', 30)))
-        options_layout.addRow("Días a revisar:", self.days_to_check)
-        
-        options_group.setLayout(options_layout)
-        layout.addWidget(options_group)
-        
-        # Gmail label
-        label_group = QGroupBox("Etiqueta de Gmail")
-        label_layout = QFormLayout()
+        form.addRow("Días a revisar:", self.days_to_check)
 
         self.label_edit = QLineEdit(self.config.get('label_name', 'DTE_Processed'))
         self.label_edit.setPlaceholderText("Nombre de la etiqueta en Gmail")
-        label_layout.addRow("Etiqueta:", self.label_edit)
+        form.addRow("Etiqueta:", self.label_edit)
 
-        # Note: folder option removed — use Gmail labels only
+        options_layout.addLayout(form)
 
-        info_label = QLabel(
-            "🏷️ Esta etiqueta se aplicará a los correos procesados exitosamente.\n"
-            "Los correos con esta etiqueta no se volverán a procesar."
-        )
-        info_label.setWordWrap(True)
-        info_label.setStyleSheet("color: #666; font-size: 11px;")
-        label_layout.addRow("", info_label)
+        options_layout.addWidget(QLabel("Palabras clave (una por línea):"))
+        self.keywords_edit = QTextEdit()
+        keywords = self.config.get('keywords', [])
+        self.keywords_edit.setText('\n'.join(keywords))
+        self.keywords_edit.setMaximumHeight(120)
+        options_layout.addWidget(self.keywords_edit)
 
-        label_group.setLayout(label_layout)
-        layout.addWidget(label_group)
-        
-        # Buttons
+        options_tab.setLayout(options_layout)
+        tabs.addTab(options_tab, "Opciones")
+
+        layout.addWidget(tabs)
+
+        # Bottom buttons
         buttons_layout = QHBoxLayout()
-        
-        test_btn = QPushButton("Probar Conexión")
-        test_btn.clicked.connect(self.test_connection)
-        test_btn.setStyleSheet("background-color: #2196F3; color: white;")
-        buttons_layout.addWidget(test_btn)
-        
         buttons_layout.addStretch()
-        
         save_btn = QPushButton("Guardar")
         save_btn.clicked.connect(self.save_settings)
         save_btn.setStyleSheet("background-color: #4CAF50; color: white;")
         buttons_layout.addWidget(save_btn)
-        
         cancel_btn = QPushButton("Cancelar")
         cancel_btn.clicked.connect(self.reject)
         buttons_layout.addWidget(cancel_btn)
-        
         layout.addLayout(buttons_layout)
     
     def browse_download_path(self):
@@ -134,44 +103,25 @@ class SettingsDialog(QDialog):
         if folder:
             self.download_path.setText(folder)
     
-    def test_connection(self):
-        """Prueba la conexión IMAP"""
-        try:
-            from infrastructure.imap_service import ImapService
-            
-            service = ImapService(
-                email_address=self.email_input.text(),
-                password=self.password_input.text()
-            )
-            
-            if service.connect():
-                QMessageBox.information(self, "Éxito", "✅ Conexión exitosa a Gmail")
-                service.disconnect()
-            else:
-                QMessageBox.warning(
-                    self, 
-                    "Error", 
-                    "❌ No se pudo conectar.\n\n"
-                    "Verifica:\n"
-                    "1. Que el correo sea correcto\n"
-                    "2. Que uses contraseña de aplicación\n"
-                    "3. Que tengas IMAP habilitado en Gmail"
-                )
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error de conexión:\n{str(e)}")
-    
     def save_settings(self):
         # Validar campos requeridos
-        if not self.email_input.text() or not self.password_input.text():
-            QMessageBox.warning(self, "Campos requeridos", "Email y contraseña son obligatorios")
-            return
+        # No se guardan cuentas en este diálogo; use 'Administrar cuentas' para ello.
         
         # Guardar configuración
-        self.config.set('email', self.email_input.text())
-        self.config.set('password', self.password_input.text())
+
         self.config.set('base_download_path', self.download_path.text())
-        self.config.set('max_emails_per_run', int(self.max_emails.text()))
-        self.config.set('days_to_check', int(self.days_to_check.text()))
+        # Organización de archivos
+        self.config.set('storage_create_year', bool(self.create_year_cb.isChecked()))
+        self.config.set('storage_create_month', bool(self.create_month_cb.isChecked()))
+        self.config.set('storage_create_sender', bool(self.create_sender_cb.isChecked()))
+        try:
+            self.config.set('max_emails_per_run', int(self.max_emails.text()))
+        except Exception:
+            self.config.set('max_emails_per_run', self.config.get('max_emails_per_run', 100))
+        try:
+            self.config.set('days_to_check', int(self.days_to_check.text()))
+        except Exception:
+            self.config.set('days_to_check', self.config.get('days_to_check', 30))
         self.config.set('label_name', self.label_edit.text())
         
         # Guardar keywords
@@ -180,3 +130,22 @@ class SettingsDialog(QDialog):
         self.config.set('keywords', keywords)
         
         self.accept()
+
+    def update_preview(self):
+        base = self.download_path.text() or './downloads'
+        # ejemplo
+        example_year = '2026'
+        example_month = '06 Junio'
+        example_sender = 'proveedor_at_example.com'
+
+        parts = [base]
+        if getattr(self, 'create_year_cb', None) and self.create_year_cb.isChecked():
+            parts.append(example_year)
+        if getattr(self, 'create_month_cb', None) and self.create_month_cb.isChecked():
+            parts.append(example_month)
+        if getattr(self, 'create_sender_cb', None) and self.create_sender_cb.isChecked():
+            parts.append(example_sender)
+
+        example_path = "/".join(parts)
+        if hasattr(self, 'preview_label'):
+            self.preview_label.setText(f"Ejemplo de ruta: {example_path}")

@@ -2,15 +2,17 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                               QPushButton, QTextEdit, QLabel, QDateTimeEdit,
                               QProgressBar, QGroupBox, QCheckBox, QMessageBox,
                               QStatusBar, QTabWidget, QLineEdit, QSpinBox,
-                              QApplication)
-from PySide6.QtCore import Qt, QThread, Signal, QDateTime, QTimer
+                              QApplication, QComboBox)
+from PySide6.QtCore import Qt, QThread, Signal, QDateTime, QTimer, QDate, QTime
 from PySide6.QtGui import QFont, QIcon
 from datetime import datetime, timedelta
 from application.email_processor import EmailProcessor
 from infrastructure.imap_service import ImapService
 from infrastructure.file_storage import FileStorage
+from infrastructure.account_db import AccountDB
 from config import Config
 from ui.settings_dialog import SettingsDialog
+from ui.accounts_manager import AccountsManagerDialog
 import os
 import traceback
 
@@ -45,6 +47,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.config = Config()
+        self.account_db = AccountDB()
         self.processor = None
         self.worker = None
         self.imap_service = None
@@ -53,7 +56,12 @@ class MainWindow(QMainWindow):
     
     def init_ui(self):
         self.setWindowTitle("Email Processor - DTE (IMAP)")
-        self.setGeometry(100, 100, 900, 700)
+        # Ajustar tamaño inicial según resolución de pantalla para soportar pantallas pequeñas
+        screen = QApplication.primaryScreen().availableGeometry()
+        width = min(900, screen.width() - 100)
+        height = min(700, int(screen.height() * 0.85))
+        self.setGeometry(100, 100, width, height)
+        self.setMinimumSize(640, 360)
         
         # Central widget
         central_widget = QWidget()
@@ -75,25 +83,40 @@ class MainWindow(QMainWindow):
         date_layout.addWidget(QLabel("Desde:"))
         self.start_date = QDateTimeEdit()
         self.start_date.setCalendarPopup(True)
-        self.start_date.setDateTime(QDateTime.currentDateTime().addDays(-30))
+        # Mostrar segundos y permitir edición de tiempo
+        self.start_date.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.start_date.setDateTime(QDateTime(QDate.currentDate().addDays(-30), QTime(0, 0, 0)))
         date_layout.addWidget(self.start_date)
         
         date_layout.addWidget(QLabel("Hasta:"))
         self.end_date = QDateTimeEdit()
         self.end_date.setCalendarPopup(True)
-        self.end_date.setDateTime(QDateTime.currentDateTime())
+        self.end_date.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.end_date.setDateTime(QDateTime(QDate.currentDate(), QTime(23, 59, 59)))
         date_layout.addWidget(self.end_date)
         
         # Quick date buttons
         quick_layout = QHBoxLayout()
         for days, label in [(1, "24h"), (7, "7d"), (30, "30d")]:
             btn = QPushButton(label)
-            btn.clicked.connect(lambda checked, d=days: self.set_quick_date(d))
+            # Aceptar el parámetro 'checked' si la señal lo envía, o no recibir nada.
+            btn.clicked.connect(lambda checked=False, d=days: self.set_quick_date(d))
             quick_layout.addWidget(btn)
         
         date_layout.addLayout(quick_layout)
         date_group.setLayout(date_layout)
         processing_layout.addWidget(date_group)
+
+        # Cuenta selector
+        account_layout = QHBoxLayout()
+        account_layout.addWidget(QLabel("Cuenta:"))
+        self.account_combo = QComboBox()
+        self.account_combo.setMinimumWidth(300)
+        account_layout.addWidget(self.account_combo)
+        self.manage_accounts_btn = QPushButton("Administrar cuentas")
+        self.manage_accounts_btn.clicked.connect(self.open_accounts_manager)
+        account_layout.addWidget(self.manage_accounts_btn)
+        processing_layout.addLayout(account_layout)
         
         # Max emails
         max_layout = QHBoxLayout()
@@ -207,11 +230,53 @@ class MainWindow(QMainWindow):
         interval = self.config.get('schedule_interval', 30)
         self.interval_spin.setValue(interval)
         self.max_emails.setValue(self.config.get('max_emails_per_run', 100))
+        # Cargar cuentas desde la DB
+        self.populate_accounts()
+
+    def populate_accounts(self):
+        """Carga cuentas desde la base de datos en el combo"""
+        try:
+            self.account_combo.clear()
+            accounts = self.account_db.list_accounts()
+            for a in accounts:
+                display = f"{a['email']} ({a.get('provider','')})" if a.get('provider') else a['email']
+                self.account_combo.addItem(display, a['id'])
+
+            # Select default if exists
+            default_id = self.config.get('default_account_id')
+            if default_id:
+                for i in range(self.account_combo.count()):
+                    if self.account_combo.itemData(i) == default_id:
+                        self.account_combo.setCurrentIndex(i)
+                        break
+        except Exception:
+            pass
+
+    def open_accounts_manager(self):
+        dlg = AccountsManagerDialog(self)
+        dlg.exec()
+        # refrescar lista de cuentas después de administrar
+        self.populate_accounts()
     
     def set_quick_date(self, days):
         """Establece fecha rápida"""
-        self.start_date.setDateTime(QDateTime.currentDateTime().addDays(-days))
-        self.end_date.setDateTime(QDateTime.currentDateTime())
+        # Calcular usando el valor actual de 'Hasta'
+        try:
+            end_dt = self.end_date.dateTime()
+            if days == 1:
+                # Para 24h: poner mismo día/mes/año que 'Hasta' y hora 00:00:00
+                start_dt = QDateTime(end_dt.date(), QTime(0, 0, 0))
+            else:
+                # Para 7d/30d: restar días sin modificar horas/minutos/segundos
+                start_dt = QDateTime(end_dt.date().addDays(-days), QTime(0, 0, 0))
+
+            self.start_date.setDateTime(start_dt)
+        except Exception:
+            # fallback: usar ahora relativo
+            start_dt = QDateTime.currentDateTime().addDays(-days)
+            end_dt = QDateTime.currentDateTime()
+            self.start_date.setDateTime(start_dt)
+            self.end_date.setDateTime(end_dt)
     
     def start_processing(self):
         """Inicia el procesamiento manual"""
@@ -331,49 +396,71 @@ class MainWindow(QMainWindow):
     def initialize_processor(self):
         """Inicializa el procesador con la configuración actual"""
         try:
-            # Verificar credenciales
-            email_addr = self.config.get('email')
-            password = self.config.get('password')
-            
+            # Verificar cuenta seleccionada
+            account_id = self.account_combo.currentData()
+            if not account_id:
+                QMessageBox.warning(
+                    self,
+                    "Cuenta requerida",
+                    "Debe seleccionar o configurar al menos una cuenta en 'Administrar cuentas'."
+                )
+                return False
+
+            account = self.account_db.get_account(account_id)
+            if not account:
+                QMessageBox.warning(self, "Cuenta no encontrada", "La cuenta seleccionada no existe.")
+                return False
+
+            email_addr = account.get('email')
+            password = account.get('password')
+
             if not email_addr or not password:
                 QMessageBox.warning(
                     self,
                     "Configuración requerida",
-                    "Debe configurar su correo y contraseña de aplicación.\n"
-                    "Vaya a 'Configuración' para establecerlos."
+                    "La cuenta seleccionada no tiene email o password. Editela en 'Administrar cuentas'."
                 )
                 return False
             
             # Crear servicio IMAP
+            # Crear servicio IMAP usando datos de la cuenta
+            server = account.get('imap_server') or self.config.get('imap_server', 'imap.gmail.com')
+            port = int(account.get('imap_port') or self.config.get('imap_port', 993))
+            use_ssl = bool(account.get('use_ssl', 1))
+
             self.imap_service = ImapService(
                 email_address=email_addr,
                 password=password,
-                imap_server=self.config.get('imap_server', 'imap.gmail.com'),
-                imap_port=self.config.get('imap_port', 993)
+                imap_server=server,
+                imap_port=port,
+                use_ssl=use_ssl
             )
-            
-            # Conectar
-            self.log("Conectando a Gmail...")
+            self.log(f"Conectando a {server}:{port} (SSL={use_ssl})...")
             if not self.imap_service.connect():
                 QMessageBox.critical(
                     self,
                     "Error de conexión",
-                    "No se pudo conectar a Gmail.\n\n"
+                    f"No se pudo conectar a {server}:{port}.\n\n"
                     "Verifique:\n"
-                    "1. Email y contraseña de aplicación correctos\n"
-                    "2. IMAP habilitado en configuración de Gmail\n"
+                    "1. Email y contraseña correctos\n"
+                    "2. Servidor/puerto IMAP configurados\n"
                     "3. Conexión a internet"
                 )
                 return False
             
-            self.log("✅ Conectado a Gmail exitosamente")
+            self.log(f"✅ Conectado a {server}:{port} exitosamente")
             
             # Asegurar que la etiqueta exista
             folder_name = self.config.get('label_name', 'DTE_Processed')
             self.imap_service.create_label_if_not_exists(folder_name)
             
-            # Crear storage
-            file_storage = FileStorage(self.config.get('base_download_path', './downloads'))
+            # Crear storage con opciones de organización
+            file_storage = FileStorage(
+                self.config.get('base_download_path', './downloads'),
+                create_year=self.config.get('storage_create_year', True),
+                create_month=self.config.get('storage_create_month', True),
+                create_sender=self.config.get('storage_create_sender', True)
+            )
             
             # Crear procesador
             self.processor = EmailProcessor(

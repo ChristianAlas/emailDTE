@@ -13,11 +13,12 @@ logger = logging.getLogger(__name__)
 
 class ImapService(IEmailService):
     def __init__(self, email_address: str, password: str, 
-                 imap_server: str = "imap.gmail.com", imap_port: int = 993):
+                 imap_server: str = "imap.gmail.com", imap_port: int = 993, use_ssl: bool = True):
         self.email_address = email_address
         self.password = password
         self.imap_server = imap_server
         self.imap_port = imap_port
+        self.use_ssl = use_ssl
         self.connection = None
     
     def _normalize_date_to_utc(self, dt: datetime) -> datetime:
@@ -43,21 +44,23 @@ class ImapService(IEmailService):
             return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} (sin timezone)"
     
     def connect(self) -> bool:
-        """Conecta al servidor IMAP de Gmail"""
+        """Conecta al servidor IMAP usando los parámetros configurados"""
         try:
-            # Crear conexión SSL
-            self.connection = imaplib.IMAP4_SSL(self.imap_server, self.imap_port)
-            
-            # Login con contraseña de aplicación
+            # Crear conexión (SSL o no SSL según configuración)
+            if self.use_ssl:
+                self.connection = imaplib.IMAP4_SSL(self.imap_server, self.imap_port)
+            else:
+                self.connection = imaplib.IMAP4(self.imap_server, self.imap_port)
+
+            # Login con contraseña (puede ser contraseña de aplicación)
             self.connection.login(self.email_address, self.password)
-            
-            # Habilitar soporte para etiquetas de Gmail
-            # XLIST es específico de Gmail para manejar etiquetas
+
+            # Seleccionar INBOX por defecto
             self.connection.select('INBOX')
-            
-            logger.info(f"Conectado exitosamente a {self.email_address}")
+
+            logger.info(f"Conectado exitosamente a {self.email_address} via {self.imap_server}:{self.imap_port} (SSL={self.use_ssl})")
             return True
-            
+
         except imaplib.IMAP4.error as e:
             logger.error(f"Error de autenticación IMAP: {e}")
             return False

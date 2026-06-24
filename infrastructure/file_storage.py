@@ -5,8 +5,11 @@ from domain.interfaces import IFileStorage
 from domain.entities import EmailMessage
 
 class FileStorage(IFileStorage):
-    def __init__(self, base_path: str):
+    def __init__(self, base_path: str, create_year: bool = True, create_month: bool = True, create_sender: bool = True):
         self.base_path = Path(base_path)
+        self.create_year = create_year
+        self.create_month = create_month
+        self.create_sender = create_sender
         self.base_path.mkdir(parents=True, exist_ok=True)
     
     def get_download_path(self, email: EmailMessage) -> str:
@@ -16,7 +19,7 @@ class FileStorage(IFileStorage):
         email_user = "".join(c for c in email_user if c.isalnum() or c in ('@', '_', '-'))
         email_user = email_user.replace('@', '_at_')
         
-        # Crear path: YYYY/MM MonthName/email/
+        # Crear path según configuración: YYYY / MM MonthName / sender
         year = email.date.strftime('%Y')
         month_num = email.date.strftime('%m')
         
@@ -29,8 +32,15 @@ class FileStorage(IFileStorage):
         }
         month_name = meses.get(month_num, month_num)
         
-        folder_name = f"{month_num} {month_name}"
-        path = self.base_path / year / folder_name / email_user
+        parts = [self.base_path]
+        if self.create_year:
+            parts.append(year)
+        if self.create_month:
+            parts.append(f"{month_num} {month_name}")
+        if self.create_sender:
+            parts.append(email_user)
+
+        path = Path(os.path.join(*[str(p) for p in parts]))
         path.mkdir(parents=True, exist_ok=True)
         
         return str(path)

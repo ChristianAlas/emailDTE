@@ -42,21 +42,31 @@ class SchedulerManager:
             # Crear servicio IMAP
             self.imap_service = ImapService(
                 email_address=email_addr,
-                password=password
+                password=password,
+                imap_server=self.config.get('imap_server', 'imap.gmail.com'),
+                imap_port=self.config.get('imap_port', 993),
+                use_ssl=self.config.get('imap_use_ssl', True)
             )
-            
+
+            server = self.config.get('imap_server', 'imap.gmail.com')
+            port = self.config.get('imap_port', 993)
             if not self.imap_service.connect():
-                logger.error("No se pudo conectar a Gmail")
+                logger.error(f"No se pudo conectar a {server}:{port}")
                 return False
-            
-            logger.info("Conectado a Gmail exitosamente")
+
+            logger.info(f"Conectado a {server}:{port} exitosamente")
             
             # Asegurar que la etiqueta exista
             folder_name = self.config.get('label_name', 'DTE_Processed')
             self.imap_service.create_label_if_not_exists(folder_name)
             
             # Crear storage
-            file_storage = FileStorage(self.config.get('base_download_path', './downloads'))
+            file_storage = FileStorage(
+                self.config.get('base_download_path', './downloads'),
+                create_year=self.config.get('storage_create_year', True),
+                create_month=self.config.get('storage_create_month', True),
+                create_sender=self.config.get('storage_create_sender', True)
+            )
             
             # Crear procesador
             self.processor = EmailProcessor(

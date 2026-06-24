@@ -2,8 +2,13 @@
     "email": "info.renes@gmail.com",
     "password": "lkqd tnue jgft mbte",
     "imap_server": "imap.gmail.com",
+    "imap_use_ssl": true,
+    "provider": "Gmail",
     "imap_port": 993,
     "base_download_path": "E:/Users/Descargas/DTE descargados",
+    "storage_create_year": true,
+    "storage_create_month": true,
+    "storage_create_sender": false,
     "keywords": [
         "DTE",
         "Factura Electronica",

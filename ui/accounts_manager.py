@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, QPushButton, 
-                              QMessageBox, QLineEdit, QLabel, QGroupBox)
+                              QMessageBox, QLineEdit, QLabel, QGroupBox, QHeaderView)
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont
 from ui.account_dialog import AccountDialog
 from infrastructure.account_db import AccountDB
 
@@ -19,7 +20,11 @@ class AccountsManagerDialog(QDialog):
 
         # Título
         title = QLabel("Cuentas Registradas")
-        title.setStyleSheet("font-size: 14px; font-weight: bold; color: #1976d2;")
+        title_font = QFont()
+        title_font.setPointSize(14)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        title.setStyleSheet("color: #4db8a8;")
         layout.addWidget(title)
 
         # Filtros
@@ -47,27 +52,53 @@ class AccountsManagerDialog(QDialog):
         self.table.setHorizontalHeaderLabels(["ID", "Email", "Proveedor", "Servidor IMAP", "Puerto", "SSL"])
         self.table.setColumnHidden(0, True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setMinimumHeight(350)
+        self.table.setAlternatingRowColors(True)
+        self.table.setRowHeight(0, 35)
+        
+        # Configurar estilos alineados con el tema dark_teal
         self.table.setStyleSheet("""
             QTableWidget {
-                border: 1px solid #ccc;
+                border: 1px solid #36696b;
                 border-radius: 4px;
-                background-color: #fafafa;
+                gridline-color: #36696b;
             }
             QTableWidget::item {
                 padding: 5px;
+                height: 35px;
+                border: none;
+            }
+            QTableWidget::item:selected {
+                background-color: #2d5e61;
+                color: #ffffff;
+            }
+            QTableWidget::item:alternate-background-color {
+                background-color: #2a2a2a;
             }
             QHeaderView::section {
-                background-color: #1976d2;
-                color: white;
-                padding: 5px;
+                background-color: #1a4d4f;
+                color: #4db8a8;
+                padding: 8px 5px;
                 border: none;
                 font-weight: bold;
+                border-right: 1px solid #36696b;
+            }
+            QHeaderView::section:last {
+                border-right: none;
             }
         """)
-        # Ajustar ancho de columnas
-        self.table.resizeColumnsToContents()
+        
+        # Configurar encabezados
+        header = self.table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)  # Email
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Proveedor
+        header.setSectionResizeMode(3, QHeaderView.Stretch)  # Servidor IMAP
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Puerto
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # SSL
+        
         layout.addWidget(self.table)
 
         # Botones de control
@@ -169,10 +200,14 @@ class AccountsManagerDialog(QDialog):
             self.table.setItem(row, 3, QTableWidgetItem(a.get('imap_server') or ''))
             self.table.setItem(row, 4, QTableWidgetItem(str(a.get('imap_port') or '')))
             self.table.setItem(row, 5, QTableWidgetItem('✓ Sí' if a.get('use_ssl') else '✗ No'))
+            # Ajustar altura de la fila
+            self.table.setRowHeight(row, 35)
             displayed_count += 1
         
-        # Resizar columnas
-        self.table.resizeColumnsToContents()
+        # Resizar columnas automáticamente
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(1, QHeaderView.Stretch)  # Email
+        header.setSectionResizeMode(3, QHeaderView.Stretch)  # Servidor IMAP
 
     def add_account(self):
         dlg = AccountDialog(self)
